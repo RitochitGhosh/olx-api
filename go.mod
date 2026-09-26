@@ -1,4 +1,4 @@
-module github.com/ritochitghosh/olx-api
+module github.com/RitochitGhosh/olx-api
 
 go 1.26.7
 

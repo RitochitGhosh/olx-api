@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ritochitghosh/olx-api/internal/config"
+	"github.com/RitochitGhosh/olx-api/internal/config"
 )
 
 func main() {
