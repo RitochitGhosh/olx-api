@@ -1,26 +1,29 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/RitochitGhosh/olx-api/internal/config"
+	"github.com/RitochitGhosh/olx-api/internal/db"
+	"github.com/RitochitGhosh/olx-api/internal/handlers"
 )
 
 func main() {
 	cfg := config.MustLoad()
 
+	_, err := db.Connect(cfg.DatabaseUrl)
+	if err != nil {
+		log.Fatalf("Failed to connect with database: %v", err)
+	}
+
+	fmt.Println("Connected to database...")
+
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-
-		w.Write([]byte(`{
-			"status": "ok"
-		}`))
-	})
+	mux.HandleFunc("GET /healthz", handlers.HealthHandler)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

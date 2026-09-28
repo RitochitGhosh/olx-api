@@ -16,8 +16,9 @@ const (
 )
 
 type Config struct {
-	Port string
-	Env  EnvType
+	Port        string
+	Env         EnvType
+	DatabaseUrl string
 }
 
 func ParseEnv(value string) (EnvType, error) {
@@ -45,9 +46,15 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("invalid ENV configuration: %w", err)
 	}
 
+	databaseUrl := os.Getenv("DATABASE_URL")
+	if databaseUrl == "" {
+		return Config{}, fmt.Errorf("DATABASE_URL is required")
+	}
+
 	return Config{
-		Port: port,
-		Env:  parsedEnv,
+		Port:        port,
+		Env:         parsedEnv,
+		DatabaseUrl: databaseUrl,
 	}, nil
 }
 
