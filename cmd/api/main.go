@@ -14,16 +14,20 @@ import (
 func main() {
 	cfg := config.MustLoad()
 
-	_, err := db.Connect(cfg.DatabaseUrl)
+	db, err := db.Connect(cfg.DatabaseUrl)
 	if err != nil {
 		log.Fatalf("Failed to connect with database: %v", err)
 	}
 
 	fmt.Println("Connected to database...")
 
+	lh := handlers.NewListingHandler(db)
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", handlers.HealthHandler)
+	mux.HandleFunc("GET /listings", lh.FetchListings)
+	mux.HandleFunc("DELETE /listings/{id}", lh.DeleteListing)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

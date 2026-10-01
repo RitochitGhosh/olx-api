@@ -38,5 +38,6 @@ func main() {
 	default:
 		log.Fatalf("unknown command: %s", os.Args[1])
 	}
+	
 	fmt.Println("done running migration...")
 }
