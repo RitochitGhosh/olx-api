@@ -32,12 +32,14 @@ type listing struct {
 
 // Method Receiver
 func (lh ListingHandler) FetchListings(w http.ResponseWriter, r *http.Request) {
-	rows, err := lh.db.Query(`
-			SELECT id, title, description, price, city, created_at
-			FROM listings
-			ORDER BY created_at DESC
-			LIMIT 100
-		`)
+	// request scoped context
+	ctx := r.Context()
+	rows, err := lh.db.QueryContext(ctx, `
+		SELECT id, title, description, price, city, created_at
+		FROM listings
+		ORDER BY created_at DESC
+		LIMIT 100
+	`)
 	if err != nil {
 		log.Printf("query: %v", err)
 		http.Error(w, "failed to fetch listings", http.StatusNotFound)
@@ -74,10 +76,13 @@ func (lh ListingHandler) DeleteListing(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	fmt.Println("id: ", id)
 
-	result, err := lh.db.Exec(`
-			DELETE FROM listings
-			WHERE id = $1
-		`, id)
+	ctx := r.Context()
+
+	result, err := lh.db.ExecContext(ctx, `
+		DELETE FROM listings
+		WHERE id = $1
+	`, id)
+	
 	if err != nil {
 		log.Printf("db.Exec: %v", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
