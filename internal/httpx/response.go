@@ -10,7 +10,10 @@ type Code string
 
 const (
 	CodeInvalidID        Code = "invalid_id"        // 400
+	CodeInvalidJSON      Code = "invalid_json"      // 400
 	CodeUnauthenticated  Code = "unauthenticated"   // 401
+	CodeInvalidToken     Code = "invalid_token"     // 401
+	CodeExpiredToken     Code = "expired_token"     // 401
 	CodeForbidden        Code = "forbidden"         // 403
 	CodeNotFound         Code = "not_found"         // 404
 	CodeConflict         Code = "conflict"          // 409
@@ -29,9 +32,21 @@ var errorDefinitions = map[Code]errorDefinition{
 		Status:  http.StatusBadRequest,
 		Message: "Invalid ID",
 	},
+	CodeInvalidJSON: {
+		Status:  http.StatusBadRequest,
+		Message: "Invalid JSON",
+	},
 	CodeUnauthenticated: {
 		Status:  http.StatusUnauthorized,
 		Message: "Authentication Required",
+	},
+	CodeInvalidToken: {
+		Status: http.StatusUnauthorized,
+		Message: "Invalid Token",
+	},
+	CodeExpiredToken: {
+		Status: http.StatusUnauthorized,
+		Message: "Expired Token",
 	},
 	CodeForbidden: {
 		Status:  http.StatusForbidden,

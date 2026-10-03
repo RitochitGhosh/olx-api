@@ -2,13 +2,15 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
-	"uuid"
 
 	"github.com/RitochitGhosh/olx-api/internal/httpx"
 	"github.com/RitochitGhosh/olx-api/internal/middleware"
+	"github.com/google/uuid"
 )
 
 type ListingHandler struct {
@@ -93,7 +95,6 @@ func (lh *ListingHandler) DeleteListing(w http.ResponseWriter, r *http.Request) 
 
 	requestID := middleware.RequestIdFromContext(ctx)
 	// requestID := ctx.Value("requestCtxId").(string)
-	id := r.PathValue("id")
 
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -139,4 +140,46 @@ func (lh *ListingHandler) DeleteListing(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (lh *ListingHandler) CreateListing(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	requestID := middleware.RequestIdFromContext(ctx)
+
+	var req listing
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		lh.logger.Warn(
+			"failed to parse req body",
+			"request_id", requestID,
+			"error", err,
+		)
+		httpx.Error(w, httpx.CodeInvalidJSON, requestID)
+		return
+	}
+
+	row := lh.db.QueryRowContext(ctx, `
+		INSERT INTO listings (title, description, price, city)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`, req.Title, req.Description, req.Price, req.City)
+
+	var listingID string
+	if err := row.Scan(&listingID); err != nil {
+		lh.logger.Error(
+			"failed to insert listing",
+			"request_id", requestID,
+			"error", err,
+		)
+		httpx.Error(w, httpx.CodeInternalError, requestID)
+		return
+	}
+
+	fmt.Println("Request:", req)
+	lh.logger.Info(
+		"listing created successfully",
+		"listing_id", listingID,
+		"request_id", requestID,
+	)
+
+	httpx.Success(w, http.StatusCreated, map[string]string{"id": listingID}, requestID)
 }
