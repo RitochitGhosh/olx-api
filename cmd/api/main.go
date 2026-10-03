@@ -1,57 +1,137 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/RitochitGhosh/olx-api/internal/config"
 	"github.com/RitochitGhosh/olx-api/internal/db"
 	"github.com/RitochitGhosh/olx-api/internal/handlers"
+	"github.com/RitochitGhosh/olx-api/internal/listing"
 	"github.com/RitochitGhosh/olx-api/internal/middleware"
 )
 
 func main() {
+	// Config
 	cfg := config.MustLoad()
 
-	db, err := db.Connect(cfg.DatabaseUrl)
-	if err != nil {
-		log.Fatalf("Failed to connect with database: %v", err)
-	}
-	logHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		AddSource: true,
-		Level:     slog.LevelInfo,
-		// ReplaceAttr: strips sensitive key-value, eg. password, auth-key,
-	})
+	// Logger
+	logHandler := slog.NewJSONHandler(
+		os.Stdout,
+		&slog.HandlerOptions{
+			AddSource: true,
+			Level:     slog.LevelInfo,
+		},
+	)
+
 	logger := slog.New(logHandler)
 	slog.SetDefault(logger)
 
-	fmt.Println("Connected to database...")
+	// Database
+	database, err := db.Connect(cfg.DatabaseUrl)
+	if err != nil {
+		logger.Error(
+			"failed to connect to database",
+			"error", err,
+		)
+		os.Exit(1)
+	}
+	defer database.Close()
+	logger.Info("connected to database")
 
-	lh := handlers.NewListingHandler(db, logger)
+	// Dependencies
+	listingRepo := listing.NewPostgresRepository(database)
+	listingService := listing.NewService(
+		listingRepo,
+	)
+	listingHandler := listing.NewHandler(
+		listingService,
+		logger,
+	)
+
+	// Router
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /healthz", handlers.HealthHandler)
-	mux.HandleFunc("GET /listings", lh.FetchListings)
-	mux.HandleFunc("POST /listings", lh.CreateListing)
-	mux.HandleFunc("DELETE /listings/{id}", lh.DeleteListing)
+	listing.RegisterRoutes(
+		mux,
+		listingHandler,
+	)
 
-	handler := middleware.RequestId(mux)
+	mux.HandleFunc(
+		"GET /healthz",
+		handlers.HealthHandler,
+	)
 
-	srv := &http.Server{
+	// Middleware
+	var handler http.Handler = mux
+	handler = middleware.RequestId(handler)
+
+	// Later:
+	// handler = middleware.RequestLogger(logger)(handler)
+	// handler = middleware.Recover(logger)(handler)
+
+	// HTTP Server
+
+	server := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      handler,
-		ReadTimeout:  time.Second * 10,
-		WriteTimeout: time.Second * 30,
-		IdleTimeout:  time.Second * 60,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("server is listening on %s", srv.Addr)
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("server failed: %v", err)
+	// Start server
+	go func() {
+		logger.Info(
+			"server started",
+			"address", server.Addr,
+		)
+
+		err := server.ListenAndServe()
+
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error(
+				"server failed",
+				"error", err,
+			)
+
+			os.Exit(1)
+		}
+	}()
+
+	// Graceful shutdown
+	shutdownSignal := make(chan os.Signal, 1)
+
+	signal.Notify(
+		shutdownSignal,
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+
+	<-shutdownSignal
+
+	logger.Info("shutdown signal received")
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Error(
+			"server shutdown failed",
+			"error", err,
+		)
+		return
 	}
+
+	logger.Info("server stopped gracefully")
 }
