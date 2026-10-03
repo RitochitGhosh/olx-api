@@ -3,20 +3,23 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/RitochitGhosh/olx-api/internal/middleware"
 )
 
 type ListingHandler struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
 // Constructor Pattern
-func NewListingHandler(db *sql.DB) *ListingHandler {
+func NewListingHandler(db *sql.DB, logger *slog.Logger) *ListingHandler {
 	return &ListingHandler{
-		db: db,
+		db:     db,
+		logger: logger,
 	}
 }
 
@@ -32,8 +35,11 @@ type listing struct {
 
 // Method Receiver
 func (lh ListingHandler) FetchListings(w http.ResponseWriter, r *http.Request) {
+	// generate request id
+
 	// request scoped context
 	ctx := r.Context()
+
 	rows, err := lh.db.QueryContext(ctx, `
 		SELECT id, title, description, price, city, created_at
 		FROM listings
@@ -41,7 +47,7 @@ func (lh ListingHandler) FetchListings(w http.ResponseWriter, r *http.Request) {
 		LIMIT 100
 	`)
 	if err != nil {
-		log.Printf("query: %v", err)
+		lh.logger.Error("fetch listenings failed", "error", err)
 		http.Error(w, "failed to fetch listings", http.StatusNotFound)
 		return
 	}
@@ -51,7 +57,7 @@ func (lh ListingHandler) FetchListings(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var l listing
 		if err := rows.Scan(&l.ID, &l.Title, &l.Description, &l.Price, &l.City, &l.CreatedAt); err != nil {
-			log.Printf("rows.Scan: %v", err)
+			lh.logger.Error("rows scan error", "error", err)
 			http.Error(w, "failed to scan listings", http.StatusInternalServerError)
 			return
 		}
@@ -60,7 +66,7 @@ func (lh ListingHandler) FetchListings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Printf("rows.Err: %v", err)
+		lh.logger.Error("iteration error", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -73,32 +79,22 @@ func (lh ListingHandler) FetchListings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (lh ListingHandler) DeleteListing(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	fmt.Println("id: ", id)
-
 	ctx := r.Context()
+	requestId := middleware.RequestIdFromContext(ctx)
+	// requestId := ctx.Value("requestCtxId").(string)
+	id := r.PathValue("id")
 
-	result, err := lh.db.ExecContext(ctx, `
+	lh.logger.Debug("debug log", "listing_id", id)
+
+	_, err := lh.db.ExecContext(ctx, `
 		DELETE FROM listings
 		WHERE id = $1
 	`, id)
-	
-	if err != nil {
-		log.Printf("db.Exec: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
 
-	affected, err := result.RowsAffected()
 	if err != nil {
-		log.Printf("rows affected: %v", err)
+		// log.Printf("db.ExecContext: %v", err)
+		lh.logger.Error("delete failed", "listing_id", id, "request_Id", requestId, "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if affected == 0 {
-		log.Printf("rows affected: %v", err)
-		http.Error(w, "listing not found", http.StatusNotFound)
 		return
 	}
 
