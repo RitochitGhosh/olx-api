@@ -28,11 +28,19 @@ make migrate-up
 make run
 ```
 
-Endpoints: `GET /healthz`, `GET /listings`, and `DELETE /listings/{id}`.
+Endpoints: `GET /healthz`, `GET /listings`, `GET /listings/{id}`, `POST /listings`, `PUT /listings/{id}`, and `DELETE /listings/{id}`.
 
 ```sh
 curl http://localhost:8080/healthz
 curl http://localhost:8080/listings
+```
+
+Update a listing with `PUT /listings/{id}`. Send all four editable fields; title, description, and city must be non-empty, and price must be greater than zero. This updates `updated_at` and returns the saved listing with HTTP 200. A missing listing returns 404.
+
+```sh
+curl -X PUT http://localhost:8080/listings/YOUR_LISTING_UUID \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Bike","description":"Used bike","price":100,"city":"Pune"}'
 ```
 
 ## Creating migrations
@@ -83,4 +91,15 @@ go vet ./...
 go test ./...
 ```
 
-The API is still being developed; the current listings handler needs its UUID import and parsing fixed before it will build.
+## Listing code structure
+
+`internal/listing/` keeps related code together:
+
+- **Handler:** reads HTTP requests and writes responses.
+- **Service:** trims input and validates business rules.
+- **Repository:** runs database queries using request contexts.
+- **Request/response types:** keep the JSON contract separate from the database model.
+
+New listings start with an `active` database status. Missing listings return 404; invalid IDs return 400; invalid listing fields return 422. A shared `ErrNotFound` lets the handler recognize missing records with `errors.Is`, even when an error is wrapped.
+
+Tests cover input validation and HTTP responses without needing PostgreSQL. Run them from `olx-api/` with `go test ./...`.

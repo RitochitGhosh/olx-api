@@ -32,7 +32,7 @@ func RequestId(next http.Handler) http.Handler {
 }
 
 func RequestIdFromContext(ctx context.Context) string {
-	requestId := ctx.Value(requestIdKey).(string)
-
-	return requestId
+	// Return an empty ID when middleware has not populated the context.
+	id, _ := ctx.Value(requestIdKey).(string)
+	return id
 }
